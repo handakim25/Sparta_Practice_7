@@ -7,6 +7,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "EnhancedInputComponent.h"
+#include "MaterialHLSLTree.h"
 #include "PracticeController.h"
 
 // Sets default values
@@ -17,6 +18,7 @@ APracticeCharacter::APracticeCharacter()
 
 	CapsuleComponent = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Capsule"));
 	CapsuleComponent->SetCapsuleSize(34.0f, 88.0f);
+	CapsuleComponent->SetCollisionProfileName(UCollisionProfile::Pawn_ProfileName);
 	SetRootComponent(CapsuleComponent);
 
 	MeshComponent = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh"));
@@ -33,9 +35,12 @@ APracticeCharacter::APracticeCharacter()
 	Accel = 2048.0f;
 	TurnSmoothingDamp = 5.0f;
 
-	JumpSpeed = 2000.0f;
+	JumpVelocity = 500.0f;
+	TerminalSpeed = -500.0f;
 	Gravity = -981.0f;
-	bIsJumping = false;
+	FallSpeed = 0.0f;
+	IsFall = false;
+	IsJumping = false;
 	
 	MouseXSensitive = 180.0f;
 	MouseYSensitive = 180.0f;
@@ -119,7 +124,11 @@ void APracticeCharacter::LookInput(const FInputActionValue& Value)
 
 void APracticeCharacter::StartJumpInput(const FInputActionValue& Value)
 {
-	UE_LOG(LogTemp, Display, TEXT("APracticeCharacter::StartJump"));
+	if (!IsFall)
+	{
+		IsJumping = true;
+		FallSpeed = JumpVelocity;
+	}
 }
 
 
@@ -167,12 +176,59 @@ void APracticeCharacter::FaceDirection(FVector NewDirection, float DeltaTime, bo
 
 void APracticeCharacter::Move(float DeltaTime)
 {
-	AddActorWorldOffset(MoveDirection * Velocity * DeltaTime);
+	// Problem1 : 이동을 한 번에 처리하니까 바로 지면에 충돌해서 움직일 수 없는 상황이 발생
+	// 수평 / 수직 이동을 분리해서 처리한다.
+	FVector HorizontalDelta = MoveDirection * Velocity * DeltaTime;
+	FHitResult HorizontalHit;
+	AddActorWorldOffset(HorizontalDelta, true, &HorizontalHit);
+
+	// Problem2 : 경사로를 올라갈 수 없는 문제
+	// 1. 평지에서 경사로로 이동할 경우(평지에서 이동하고 남은 거리를 경사로로 이동)
+	// 2. 경사로에서 경사로로 이동할 경우(경사로 방향으로 이동 벡터를 조정)
+	float SlopeAngle = 0.f;
+	if (HorizontalHit.IsValidBlockingHit())
+	{
+		// 
+		SlopeAngle = FMath::RadiansToDegrees(FMath::Acos(FVector::DotProduct(HorizontalHit.ImpactNormal, FVector::UpVector)));
+		UE_LOG(LogTemp, Display, TEXT("Angle : %f"), SlopeAngle);
+	}
+	
+	UpdateFallSpeed(DeltaTime);
+	FVector VerticalDelta = FVector::UpVector * FallSpeed * DeltaTime;
+	FHitResult VerticalHit;
+	AddActorWorldOffset(VerticalDelta, true, &VerticalHit);
+	
+	if (VerticalHit.IsValidBlockingHit())
+	{
+		if (VerticalHit.ImpactNormal.Z > 0.7f)
+		{
+			IsJumping = false;
+			IsFall = false;
+		}
+		// else : 벽에 충돌
+	}
+	else
+	{
+		UE_LOG(LogTemp, Display, TEXT("FallSpeed: %f"), FallSpeed);
+		IsFall = true;
+	}
+}
+
+void APracticeCharacter::UpdateFallSpeed(float DeltaTime)
+{
+	if (FallSpeed >= 0)
+	{
+		FallSpeed += Gravity * DeltaTime;
+	}
+	else if (FallSpeed > TerminalSpeed)
+	{
+		FallSpeed += Gravity * DeltaTime;
+		FallSpeed = FallSpeed > TerminalSpeed ? FallSpeed : TerminalSpeed;
+	}
 }
 
 void APracticeCharacter::AddControllerRotation(float Pitch, float Yaw, float Roll)
 {
-	
 	DeltaCameraRotator.Pitch += Pitch;
 	DeltaCameraRotator.Yaw += Yaw;
 	DeltaCameraRotator.Roll += Roll;
@@ -208,7 +264,11 @@ void APracticeCharacter::Tick(float DeltaTime)
 	// 카메라 방향, 이동, 카메라의 위치 결정 순서로 작성, 추후에 이상이 있을 경우 순서 조정
 
 	UpdateControllerRotation(DeltaTime);
-	
+
+	if (!IsFall && !IsJumping)
+	{
+		FallSpeed = 0;
+	}
 	PlaneMove(DeltaTime);
 	Move(DeltaTime);
 

@@ -75,6 +75,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Movement)
 	float TurnSmoothingDamp;
 
+	// 타고 올라갈 수 있는 경사로 각도
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Movement)
+	float AllowedSlopeAngle;
+
+	// 올라갈 수 있는 계단 높이
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Movement)
+	float StepHeight;
+	
 protected:
 	// 현재 속력
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Movement)
@@ -97,14 +105,30 @@ protected:
 	void Move(float DeltaTime);
 
 public:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jump")
-	float JumpSpeed;
+	// Jump 아이디어
+	// 1. Jump를 실행할 경우 Z축 속도를 +로 만들어서 공중으로 올린다. 매 프레임 공중 속도를 계산
+	// 2. Fall 상태를 추적하기 위해서는 2가지 방법이 있다. 하방으로 매 프레임 내리는 경우와 하방으로 Ground Check를 하는 것이다. 지금은 구현의 용이성을 위해 매 프레임 중력 값을 적용한다.
+	// 3. 충돌을 이용해서 IsFall을 판별 - 공중에서의 이동 제어, Fall Animation 출력
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
+	float JumpVelocity;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jump")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
+	float TerminalSpeed;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
 	float Gravity;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jump")
+	float FallSpeed;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Movement|Jump")
+	bool IsFall;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jump")
+	bool IsJumping;
+	
 protected:
-	bool bIsJumping;
+	void UpdateFallSpeed(float DeltaTime);
 	
 public:
 	// Look : 3인칭 시점 구현 : Spring Arm이 Controller에 대응되게 회전, Camera 위치 고정

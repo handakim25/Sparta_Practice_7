@@ -118,17 +118,43 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
 	float Gravity;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jump")
-	float FallSpeed;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Movement|Jump")
-	bool IsFall;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
+	float GroundCheckDistance;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Jump")
-	bool IsJumping;
+	// Jump 이동
+	// 수평 이동에서는 사용자의 입력이 멈추면 이동을 멈추지만 공중은 그렇지 않다.
+	// 점프를 하게 될 경우 수평 이동 방향으로 일정한 수평 속도를 유지한다.
+	// 사용자의 입력을 기준으로 수평 속도를 수정한다. 현재 구현 상으로는 이동 백터와 속력으로 나뉘어 있어서 수정이 필요할 수도 있다.
+	
+	// 공중에서 이동할 때의 감속 수치, 0: 이동 할 수 없음, 1 : 지상과 동일
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
+	float AirSpeedMultiplier;
 	
 protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Movement|Jump")
+	float FallSpeed;
+
+	// 움직이고 나서 설정이 되기 때문에 이동 방향을 구하는 중이라면 이전 프레임에서의 Fall 상태이다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category ="Movement|Jump")
+	bool IsFall;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Movement|Jump")
+	bool IsJumping;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement|Jump")
+	bool bApplyGravity;
+	
 	void UpdateFallSpeed(float DeltaTime);
+	bool IsOnGround();
+	void AirPlaneMove(float DeltaTime);
+	
+public:
+	// 드론 모드
+	// 드론 모드에서는 6 자유도 이동을 하게 된다.
+	// 현재 이동에서는 캐릭터의 이동 방향으로 회전을 구현하게 했으나 드론 모드에서는 회전이 마우스로 조정이 된다.
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement|Drone")
+	bool IsDrone;
 	
 public:
 	// Look : 3인칭 시점 구현 : Spring Arm이 Controller에 대응되게 회전, Camera 위치 고정

@@ -38,9 +38,11 @@ APracticeCharacter::APracticeCharacter()
 	JumpVelocity = 500.0f;
 	TerminalSpeed = -500.0f;
 	Gravity = -981.0f;
+	GroundCheckDistance = 5.0f;
 	FallSpeed = 0.0f;
 	IsFall = false;
 	IsJumping = false;
+	bApplyGravity = true;
 	
 	MouseXSensitive = 180.0f;
 	MouseYSensitive = 180.0f;
@@ -51,7 +53,16 @@ APracticeCharacter::APracticeCharacter()
 void APracticeCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	// 초기 공중 상태 결정
+	if (IsOnGround())
+	{
+		IsFall = false;
+	}
+	else
+	{
+		IsFall = true;
+	}
 }
 
 void APracticeCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -204,13 +215,28 @@ void APracticeCharacter::Move(float DeltaTime)
 		{
 			IsJumping = false;
 			IsFall = false;
+			UE_LOG(LogTemp, Display, TEXT("Land"));
 		}
 		// else : 벽에 충돌
 	}
 	else
 	{
-		UE_LOG(LogTemp, Display, TEXT("FallSpeed: %f"), FallSpeed);
-		IsFall = true;
+		// 지상과 충돌하지 않았을 경우 공중이다.
+
+		// 문제1. 첫 프레임에서 공중에서 지상으로 이동하는 버그
+		// 문제2. 첫 프레임에서 Fall->Land->Fall로 이동하는 버그
+		// 일단은 이동 자체는 바닥과 붙어 있어야 하니까 그대로 하고 공중 판정을 따로 레이캐스트로 진행해서 일정 거리 이하는 전부 지상 판정으로 구현하도록 한다.
+		UE_LOG(LogTemp, Display, TEXT("Air"));
+		if (IsOnGround())
+		{
+			IsJumping = false;
+			IsFall = false;
+			UE_LOG(LogTemp, Display, TEXT("Land By Line Trace"));
+		}
+		else
+		{
+			IsFall = true;
+		}
 	}
 }
 
@@ -225,6 +251,25 @@ void APracticeCharacter::UpdateFallSpeed(float DeltaTime)
 		FallSpeed += Gravity * DeltaTime;
 		FallSpeed = FallSpeed > TerminalSpeed ? FallSpeed : TerminalSpeed;
 	}
+}
+
+bool APracticeCharacter::IsOnGround()
+{
+	FVector StartLocation = GetActorLocation() - FVector(0, 0, CapsuleComponent->GetScaledCapsuleHalfHeight());
+	FVector EndLocation = StartLocation - FVector::UpVector * GroundCheckDistance;
+
+	FHitResult GroundHit;
+	FCollisionQueryParams CollisionParams;
+	CollisionParams.AddIgnoredActor(this);
+
+	bool bHit = GetWorld()->LineTraceSingleByChannel(GroundHit, StartLocation, EndLocation, ECC_Visibility, CollisionParams);
+	return bHit;
+}
+
+void APracticeCharacter::AirPlaneMove(float DeltaTime)
+{
+	// 속력 계산
+	// 공중 이동 시에는 초기 속도는 유지가 된다.
 }
 
 void APracticeCharacter::AddControllerRotation(float Pitch, float Yaw, float Roll)
@@ -265,11 +310,18 @@ void APracticeCharacter::Tick(float DeltaTime)
 
 	UpdateControllerRotation(DeltaTime);
 
+	// 지상 이동
 	if (!IsFall && !IsJumping)
 	{
 		FallSpeed = 0;
+		PlaneMove(DeltaTime);
 	}
-	PlaneMove(DeltaTime);
+	// 공중 이동
+	else
+	{
+		AirPlaneMove(DeltaTime);
+	}
+
 	Move(DeltaTime);
 
 	UpdateCamera();

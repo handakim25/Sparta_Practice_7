@@ -69,9 +69,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Movement)
 	float MoveSpeed;
 
-	// 가속도
+	// 가속도 계산 Damp
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Movement)
-	float Accel;
+	float AccelDamp;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Movement)
 	float TurnSmoothingDamp;
@@ -117,6 +117,12 @@ public:
 	// 3. 충돌을 이용해서 IsFall을 판별 - 공중에서의 이동 제어, Fall Animation 출력
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
 	float JumpVelocity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
+	float MaxJumpHorizontalVelocity;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
+	float FallMultiplier;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
 	float TerminalSpeed;

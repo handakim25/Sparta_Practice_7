@@ -7,7 +7,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "EnhancedInputComponent.h"
-#include "MaterialHLSLTree.h"
+#include "MathUtil.h"
 #include "PracticeController.h"
 
 // Sets default values
@@ -32,10 +32,12 @@ APracticeCharacter::APracticeCharacter()
 	CameraComponent->SetupAttachment(SpringArmComponent, USpringArmComponent::SocketName);
 
 	MoveSpeed = 600.0f;
-	Accel = 2048.0f;
+	AccelDamp = 20.0f;
 	TurnSmoothingDamp = 5.0f;
 
 	JumpVelocity = 500.0f;
+	MaxJumpHorizontalVelocity = 200.0f;
+	FallMultiplier = 1.5f;
 	TerminalSpeed = -2500.0f;
 	LandingLockTime = 0.1f;
 	Gravity = -981.0f;
@@ -138,6 +140,8 @@ void APracticeCharacter::LookInput(const FInputActionValue& Value)
 
 void APracticeCharacter::Jump()
 {
+	Velocity = FMath::Clamp(Velocity, 0.f, MaxJumpHorizontalVelocity);
+	
 	bIsJumping = true;
 	FallSpeed = JumpVelocity;
 
@@ -160,7 +164,6 @@ void APracticeCharacter::PlaneMove(float DeltaTime)
 	Velocity = CalculateVelocity(Velocity, TargetVelocity, DeltaTime);
 
 	// 새로운 속도를 계산
-	// 카메라 기준 이동 벡터를 그대로 사용
 	MoveDirection = GetMoveDirectionFromController();
 
 	// MoveDirection으로 회전
@@ -174,12 +177,13 @@ float APracticeCharacter::CalculateVelocity(float CurrentVelocity, float TargetV
 		return TargetVelocity;
 	}
 
-	const float Alpha = FMath::Clamp(DeltaTime * Accel, 0.f, 1.f);
+	const float Alpha = FMath::Clamp(DeltaTime * AccelDamp, 0.f, 1.f);
 	return FMath::Lerp(CurrentVelocity, TargetVelocity, Alpha);
 }
 
 FVector APracticeCharacter::GetMoveDirectionFromController() const
 {
+	// 카메라 기준 이동 벡터를 그대로 사용
 	// 그 후에 각각을 입력 벡터를 이용해서 현재 프레임에서의 월드 기준 이동 방향을 구한다.
 	const FRotator ControllerRotator = FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f);
 	const FVector ControllerForwardVector = FRotationMatrix(ControllerRotator).GetUnitAxis(EAxis::X);
@@ -242,7 +246,7 @@ void APracticeCharacter::Move(float DeltaTime)
 		{
 			// 지상과 충돌했을 경우
 			LandStart();
-			UE_LOG(LogTemp, Display, TEXT("Land"));
+			// UE_LOG(LogTemp, Display, TEXT("Land"));
 		}
 		// else : 벽에 충돌
 	}
@@ -260,11 +264,11 @@ void APracticeCharacter::Move(float DeltaTime)
 		// 2. Animation Notify를 이용해서 Land 모션을 기다림 : Animator마다 설정하는 것은 번거롭기에 다른 방법을 고려
 		// 3. 발의 Transform을 찾아서 정확한 착지 순간을 찾기 : 일반적인 상황에서 잘 작동하겠지만 착지 모션이 특이해서 발이 땅에 안 닿을 수 있다.
 		
-		UE_LOG(LogTemp, Display, TEXT("Air"));
+		// UE_LOG(LogTemp, Display, TEXT("Air"));
 		if (IsOnGround())
 		{
 			LandStart();
-			UE_LOG(LogTemp, Display, TEXT("Land By Line Trace"));
+			// UE_LOG(LogTemp, Display, TEXT("Land By Line Trace"));
 		}
 		else
 		{
@@ -281,7 +285,7 @@ void APracticeCharacter::UpdateFallSpeed(float DeltaTime)
 	}
 	else if (FallSpeed > TerminalSpeed)
 	{
-		FallSpeed += Gravity * DeltaTime;
+		FallSpeed += Gravity * DeltaTime * FallMultiplier;
 		FallSpeed = FallSpeed > TerminalSpeed ? FallSpeed : TerminalSpeed;
 	}
 }
@@ -311,7 +315,7 @@ void APracticeCharacter::AirPlaneMove(float DeltaTime)
 	
 	// 문제. 가속도 값만을 제한하니까 최종 속력을 넘어서 빨라질 수 있는 현상이 있다.
 	// 최종 속도를 값을 확인해서 최대 속도 이상으로 넘어가지 못하도록 수정
-	float AccelAmount = Accel * AirSpeedMultiplier * DeltaTime;
+	float AccelAmount = MoveSpeed * AirSpeedMultiplier * DeltaTime;
 	AccelAmount = FMath::Clamp(AccelAmount, 0.f, MoveSpeed * DeltaTime);
 	FVector Acceleration = GetMoveDirectionFromController() * AccelAmount;
 	

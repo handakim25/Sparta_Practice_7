@@ -44,6 +44,7 @@ protected:
 
 	UFUNCTION()
 	void StartJumpInput(const FInputActionValue& Value);
+	void Jump();
 
 	// 이동 입력 방향(정규화되어 있다.)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Movement")
@@ -99,7 +100,12 @@ protected:
 	// 속력, 속도를 갱신하고 회전을 한다.
 	void PlaneMove(float DeltaTime);
 	float CalculateVelocity(float CurrentVelocity, float TargetVelocity, float DeltaTime) const;
-	void FaceDirection(FVector NewDirection, float DeltaTime, bool bIsImmediate, float Damp);
+	// Controller 기준으로 이동 방향을 월드 벡터로 반환한다. 월드 벡터는 정규화되어 있다.
+	FVector GetMoveDirectionFromController() const;
+	
+	void FaceDirection(FVector NewDirection, float DeltaTime, float Damp);
+	// 즉시 해당 방향을 바라보게 한다.
+	void FaceDirection(FVector NewDirection);
 
 	// 현재 속도에 맞추어서 실질적인 이동
 	void Move(float DeltaTime);

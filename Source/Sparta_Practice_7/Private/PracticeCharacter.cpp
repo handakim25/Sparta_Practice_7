@@ -36,9 +36,10 @@ APracticeCharacter::APracticeCharacter()
 	TurnSmoothingDamp = 5.0f;
 
 	JumpVelocity = 500.0f;
-	TerminalSpeed = -500.0f;
+	TerminalSpeed = -2500.0f;
 	Gravity = -981.0f;
-	GroundCheckDistance = 5.0f;
+	GroundCheckDistance = 1.0f;
+	AirSpeedMultiplier = 0.2f;
 	FallSpeed = 0.0f;
 	IsFall = false;
 	IsJumping = false;
@@ -133,12 +134,19 @@ void APracticeCharacter::LookInput(const FInputActionValue& Value)
 	AddControllerRotation(LookDirection.Y, LookDirection.X, 0.0f);
 }
 
+void APracticeCharacter::Jump()
+{
+	IsJumping = true;
+	FallSpeed = JumpVelocity;
+
+	FaceDirection(GetMoveDirectionFromController());
+}
+
 void APracticeCharacter::StartJumpInput(const FInputActionValue& Value)
 {
 	if (!IsFall)
 	{
-		IsJumping = true;
-		FallSpeed = JumpVelocity;
+		Jump();
 	}
 }
 
@@ -150,15 +158,11 @@ void APracticeCharacter::PlaneMove(float DeltaTime)
 	Velocity = CalculateVelocity(Velocity, TargetVelocity, DeltaTime);
 
 	// 새로운 속도를 계산
-	// 로테이터의 2차원 회전을 구한 다음에 회전 방향을 기준으로 Forward, Right Vector를 분리한다.
-	// 그 후에 각각을 입력 벡터를 이용해서 현재 프레임에서의 월드 기준 이동 방향을 구한다.
-	const FRotator ControllerRotator = FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f);
-	const FVector ControllerForwardVector = FRotationMatrix(ControllerRotator).GetUnitAxis(EAxis::X);
-	const FVector ControllerRightVector = FRotationMatrix(ControllerRotator).GetUnitAxis(EAxis::Y);
-	MoveDirection = ControllerForwardVector * InputDirection.X + ControllerRightVector * InputDirection.Y;
+	// 카메라 기준 이동 벡터를 그대로 사용
+	MoveDirection = GetMoveDirectionFromController();
 
 	// MoveDirection으로 회전
-	FaceDirection(MoveDirection, DeltaTime, false, TurnSmoothingDamp);
+	FaceDirection(MoveDirection, DeltaTime, TurnSmoothingDamp);
 }
 
 float APracticeCharacter::CalculateVelocity(float CurrentVelocity, float TargetVelocity, const float DeltaTime) const
@@ -172,7 +176,16 @@ float APracticeCharacter::CalculateVelocity(float CurrentVelocity, float TargetV
 	return FMath::Lerp(CurrentVelocity, TargetVelocity, Alpha);
 }
 
-void APracticeCharacter::FaceDirection(FVector NewDirection, float DeltaTime, bool bIsImmediate, float Damp)
+FVector APracticeCharacter::GetMoveDirectionFromController() const
+{
+	// 그 후에 각각을 입력 벡터를 이용해서 현재 프레임에서의 월드 기준 이동 방향을 구한다.
+	const FRotator ControllerRotator = FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f);
+	const FVector ControllerForwardVector = FRotationMatrix(ControllerRotator).GetUnitAxis(EAxis::X);
+	const FVector ControllerRightVector = FRotationMatrix(ControllerRotator).GetUnitAxis(EAxis::Y);
+	return (ControllerForwardVector * InputDirection.X + ControllerRightVector * InputDirection.Y).GetSafeNormal();
+}
+
+void APracticeCharacter::FaceDirection(FVector NewDirection, float DeltaTime, float Damp)
 {
 	if (NewDirection.IsZero())
 		return;
@@ -183,6 +196,18 @@ void APracticeCharacter::FaceDirection(FVector NewDirection, float DeltaTime, bo
 
 	FRotator SmoothRotator = FMath::RInterpTo(GetActorRotation(), TargetRotator, DeltaTime, Damp);
 	SetActorRotation(SmoothRotator);
+}
+
+void APracticeCharacter::FaceDirection(FVector NewDirection)
+{
+	if (NewDirection.IsZero())
+		return;
+	
+	FRotator TargetRotator = FRotationMatrix::MakeFromX(NewDirection).Rotator();
+	TargetRotator.Pitch = 0.0f;
+	TargetRotator.Roll = 0.0f;
+
+	SetActorRotation(TargetRotator);
 }
 
 void APracticeCharacter::Move(float DeltaTime)
@@ -226,10 +251,13 @@ void APracticeCharacter::Move(float DeltaTime)
 		// 문제1. 첫 프레임에서 공중에서 지상으로 이동하는 버그
 		// 문제2. 첫 프레임에서 Fall->Land->Fall로 이동하는 버그
 		// 일단은 이동 자체는 바닥과 붙어 있어야 하니까 그대로 하고 공중 판정을 따로 레이캐스트로 진행해서 일정 거리 이하는 전부 지상 판정으로 구현하도록 한다.
+
+		// 추가 문제3. 이전에도 확인했던 스카이 콩콩 문제가 발생
+		
 		UE_LOG(LogTemp, Display, TEXT("Air"));
 		if (IsOnGround())
 		{
-			IsJumping = false;
+			// IsJumping = false;
 			IsFall = false;
 			UE_LOG(LogTemp, Display, TEXT("Land By Line Trace"));
 		}
@@ -266,10 +294,29 @@ bool APracticeCharacter::IsOnGround()
 	return bHit;
 }
 
+// @To-Do: 속도 / 가속도 이동 방향 계산으로 통합하면 PlaneMove를 통합해서 처리할 수도 있을 것 같다.
 void APracticeCharacter::AirPlaneMove(float DeltaTime)
 {
 	// 속력 계산
 	// 공중 이동 시에는 초기 속도는 유지가 된다.
+	// 이동 방향에 대해서는 가속도 형식으로 더해준다.
+	// 현재는 속력과 이동 방향으로 관리하므로 최종 계산 후에 속력과 이동 방향을 계산해준다.
+
+	FVector CurrentSpeed = Velocity * MoveDirection;
+	
+	// 문제. 가속도 값만을 제한하니까 최종 속력을 넘어서 빨라질 수 있는 현상이 있다.
+	// 최종 속도를 값을 확인해서 최대 속도 이상으로 넘어가지 못하도록 수정
+	float AccelAmount = Accel * AirSpeedMultiplier * DeltaTime;
+	AccelAmount = FMath::Clamp(AccelAmount, 0.f, MoveSpeed * DeltaTime);
+	FVector Acceleration = GetMoveDirectionFromController() * AccelAmount;
+	
+	FVector NewSpeed = CurrentSpeed + Acceleration;
+	if (NewSpeed.Length() > MoveSpeed)
+	{
+		NewSpeed = NewSpeed.GetSafeNormal() * MoveSpeed;
+	}
+	MoveDirection = NewSpeed.GetSafeNormal();
+	Velocity = NewSpeed.Length();
 }
 
 void APracticeCharacter::AddControllerRotation(float Pitch, float Yaw, float Roll)

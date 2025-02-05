@@ -37,12 +37,14 @@ APracticeCharacter::APracticeCharacter()
 
 	JumpVelocity = 500.0f;
 	TerminalSpeed = -2500.0f;
+	LandingLockTime = 0.1f;
 	Gravity = -981.0f;
 	GroundCheckDistance = 1.0f;
 	AirSpeedMultiplier = 0.2f;
 	FallSpeed = 0.0f;
-	IsFall = false;
-	IsJumping = false;
+	bIsFall = false;
+	bIsJumping = false;
+	bIsLanding = false;
 	bApplyGravity = true;
 	
 	MouseXSensitive = 180.0f;
@@ -58,11 +60,11 @@ void APracticeCharacter::BeginPlay()
 	// 초기 공중 상태 결정
 	if (IsOnGround())
 	{
-		IsFall = false;
+		bIsFall = false;
 	}
 	else
 	{
-		IsFall = true;
+		bIsFall = true;
 	}
 }
 
@@ -136,7 +138,7 @@ void APracticeCharacter::LookInput(const FInputActionValue& Value)
 
 void APracticeCharacter::Jump()
 {
-	IsJumping = true;
+	bIsJumping = true;
 	FallSpeed = JumpVelocity;
 
 	FaceDirection(GetMoveDirectionFromController());
@@ -144,7 +146,7 @@ void APracticeCharacter::Jump()
 
 void APracticeCharacter::StartJumpInput(const FInputActionValue& Value)
 {
-	if (!IsFall)
+	if (!bIsFall && !bIsLanding)
 	{
 		Jump();
 	}
@@ -238,8 +240,8 @@ void APracticeCharacter::Move(float DeltaTime)
 	{
 		if (VerticalHit.ImpactNormal.Z > 0.7f)
 		{
-			IsJumping = false;
-			IsFall = false;
+			// 지상과 충돌했을 경우
+			LandStart();
 			UE_LOG(LogTemp, Display, TEXT("Land"));
 		}
 		// else : 벽에 충돌
@@ -253,17 +255,20 @@ void APracticeCharacter::Move(float DeltaTime)
 		// 일단은 이동 자체는 바닥과 붙어 있어야 하니까 그대로 하고 공중 판정을 따로 레이캐스트로 진행해서 일정 거리 이하는 전부 지상 판정으로 구현하도록 한다.
 
 		// 추가 문제3. 이전에도 확인했던 스카이 콩콩 문제가 발생
+		// 이는 착지 모션이 충분히 나오기 전에 점프를 다시 실행해서 발생하는 문제이다. 다음과 같은 방법을 고려했다.
+		// 1. 일정 시간 점프 잠금 : 구현이 용이해서 해당 방법을 선택
+		// 2. Animation Notify를 이용해서 Land 모션을 기다림 : Animator마다 설정하는 것은 번거롭기에 다른 방법을 고려
+		// 3. 발의 Transform을 찾아서 정확한 착지 순간을 찾기 : 일반적인 상황에서 잘 작동하겠지만 착지 모션이 특이해서 발이 땅에 안 닿을 수 있다.
 		
 		UE_LOG(LogTemp, Display, TEXT("Air"));
 		if (IsOnGround())
 		{
-			// IsJumping = false;
-			IsFall = false;
+			LandStart();
 			UE_LOG(LogTemp, Display, TEXT("Land By Line Trace"));
 		}
 		else
 		{
-			IsFall = true;
+			bIsFall = true;
 		}
 	}
 }
@@ -319,6 +324,29 @@ void APracticeCharacter::AirPlaneMove(float DeltaTime)
 	Velocity = NewSpeed.Length();
 }
 
+void APracticeCharacter::LandStart()
+{
+	if (bIsFall)
+	{
+		bIsLanding = true;
+
+		GetWorldTimerManager().SetTimer(LandingLockTimerHandle, this, &APracticeCharacter::LandEnd, LandingLockTime, false);
+	}
+	
+	// To-Do
+	// 1. bIsJumping, bIsFall을 하나로 통합할 수 있는지 확인할 것
+	// 2. 객체는 한 번에 하나의 상태를 가지고 있으므로 enum으로 현재 상태를 표현하는 것을 고려할 것.
+	// State Machine처럼 고려해도 될 것 같다.
+	// 지금 위에서 IsFall을 true로 바꾸는 순간 Land를 실행하는데 이는 State가 Fall에서 Land로 바뀌고 State Enter를 처리하는 것과 유사하다.
+	bIsJumping = false;
+	bIsFall = false;
+}
+
+void APracticeCharacter::LandEnd()
+{
+	bIsLanding = false;
+}
+
 void APracticeCharacter::AddControllerRotation(float Pitch, float Yaw, float Roll)
 {
 	DeltaCameraRotator.Pitch += Pitch;
@@ -358,7 +386,7 @@ void APracticeCharacter::Tick(float DeltaTime)
 	UpdateControllerRotation(DeltaTime);
 
 	// 지상 이동
-	if (!IsFall && !IsJumping)
+	if (!bIsFall && !bIsJumping)
 	{
 		FallSpeed = 0;
 		PlaneMove(DeltaTime);

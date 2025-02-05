@@ -120,6 +120,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
 	float TerminalSpeed;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
+	float LandingLockTime;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement|Jump")
 	float Gravity;
@@ -142,10 +145,13 @@ protected:
 
 	// 움직이고 나서 설정이 되기 때문에 이동 방향을 구하는 중이라면 이전 프레임에서의 Fall 상태이다.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category ="Movement|Jump")
-	bool IsFall;
+	bool bIsFall;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Movement|Jump")
-	bool IsJumping;
+	bool bIsJumping;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category = "Movement|Jump")
+	bool bIsLanding;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement|Jump")
 	bool bApplyGravity;
@@ -153,6 +159,11 @@ protected:
 	void UpdateFallSpeed(float DeltaTime);
 	bool IsOnGround();
 	void AirPlaneMove(float DeltaTime);
+	void LandStart();
+	void LandEnd();
+	
+private:
+	FTimerHandle LandingLockTimerHandle;
 	
 public:
 	// 드론 모드
